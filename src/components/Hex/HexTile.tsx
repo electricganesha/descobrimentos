@@ -1,8 +1,12 @@
+import React, { useState } from "react";
 import { Html, useCursor } from "@react-three/drei";
 import { Tooltip } from "../UI/Tooltip";
 import { DoubleSide } from "three";
 import { axialToPoint, getTerrainColor } from "../../utils/hexmap";
 import { HexTile, TerrainType } from "../../types/HexTile";
+import { Decoration } from "../Decorations/DecorationTemplate";
+import { useFrame } from "@react-three/fiber";
+import { OceanShaderMaterial } from "./OceanShaderMaterial";
 
 interface HexTileProps {
   tile: HexTile;
@@ -46,6 +50,34 @@ export const HexTileComponent = ({
   const highlightColor = hovered ? "#FFFF00" : color;
   useCursor(hovered);
 
+  // For animated ocean shader
+  const isOcean = ["ocean_deep", "ocean_mid", "ocean_shallow"].includes(
+    tile.terrain
+  );
+  const [time, setTime] = useState(0);
+  useFrame((_, delta) => {
+    if (isOcean) setTime((t) => t + delta);
+  });
+
+  // Restore color and opacity nuance for ocean tiles
+  let oceanColor = "#ffffff";
+  let oceanOpacity = 1.0;
+  if (tile.terrain === "ocean_deep") {
+    oceanColor = getTerrainColor("ocean_deep", tile.elevation);
+    oceanOpacity = 0.5;
+  } else if (tile.terrain === "ocean_mid") {
+    oceanColor = getTerrainColor("ocean_mid", tile.elevation);
+    oceanOpacity = 0.7;
+  } else if (tile.terrain === "ocean_shallow") {
+    oceanColor = getTerrainColor("ocean_shallow", tile.elevation);
+    oceanOpacity = 0.85;
+  }
+  // Highlight on hover for ocean tiles
+  if (hovered && isOcean) {
+    oceanColor = "#FFFF00"; // yellow highlight
+    oceanOpacity = 0.9;
+  }
+
   return (
     <mesh
       position={[px, height / 2, pz]}
@@ -67,18 +99,32 @@ export const HexTileComponent = ({
       }
     >
       <cylinderGeometry args={[size, size, height, 6]} />
-      <meshStandardMaterial
-        transparent={
-          tile.terrain === "ocean_shallow" || tile.terrain === "ocean_deep"
-        }
-        opacity={
-          tile.terrain === "ocean_shallow" || tile.terrain === "ocean_deep"
-            ? 0.5
-            : 1
-        }
-        side={DoubleSide}
-        map={texture}
-        color={highlightColor}
+      {isOcean ? (
+        <OceanShaderMaterial
+          map={texture}
+          time={time}
+          color={oceanColor}
+          opacity={oceanOpacity}
+        />
+      ) : (
+        <meshStandardMaterial
+          transparent={
+            tile.terrain === "ocean_shallow" || tile.terrain === "ocean_deep"
+          }
+          opacity={
+            tile.terrain === "ocean_shallow" || tile.terrain === "ocean_deep"
+              ? 0.5
+              : 1
+          }
+          side={DoubleSide}
+          map={texture}
+          color={highlightColor}
+        />
+      )}
+      {/* Decorations */}
+      <Decoration
+        terrain={tile.terrain}
+        height={height + tile.q * 0.01 + tile.r * 0.01}
       />
       {hovered && (
         <>
