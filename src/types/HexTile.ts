@@ -1,7 +1,7 @@
 export type TerrainType =
-  | "deep_ocean"
-  | "mid_ocean"
-  | "shallow_ocean"
+  | "ocean_deep"
+  | "ocean_mid"
+  | "ocean_shallow"
   | "coast"
   | "plains"
   | "hills"

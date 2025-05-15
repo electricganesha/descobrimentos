@@ -1,5 +1,5 @@
 import React from "react";
-import { HexGridScene } from "./HexGridScene";
+import { HexGridScene } from "./Hex/HexGridScene";
 
 export function App() {
   return (
