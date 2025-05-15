@@ -1,139 +1,132 @@
 import React from "react";
-import { Canvas } from "@react-three/fiber";
-import { generateHexMap, TileType } from "../hexMapGenerator";
+import { Canvas, useLoader } from "@react-three/fiber";
+import { DoubleSide, TextureLoader } from "three";
+import { generateHexMap, axialToPoint } from "../hexMapGenerator";
 import { OrbitControls } from "@react-three/drei";
+import type { HexTile, TerrainType } from "../types/HexTile";
+
+// Map terrain types to texture file names (place textures in src/assets/)
+const terrainTextures: Record<TerrainType, string> = {
+  deep_ocean: "ocean.jpg",
+  mid_ocean: "ocean.jpg",
+  shallow_ocean: "ocean.jpg",
+  coast: "coast.jpg",
+  plains: "plains.jpg",
+  hills: "hills.jpg",
+  mountains: "mountains.jpg",
+};
 
 interface HexTileProps {
-  type: TileType;
-  x: number;
-  y: number;
-  adjacency: number;
-  totalCols: number;
-  totalRows: number;
+  tile: HexTile;
+  size?: number;
+  textures: Record<TerrainType, any>;
 }
 
-function getHexPosition(
-  x: number,
-  y: number,
-  totalCols: number,
-  totalRows: number
-): [number, number] {
-  // For a pointy-top hex layout
-  const r = 0.5;
-  const w = Math.sqrt(3) * r; // width of a single hex
-  const h = 2 * r; // height of a single hex
-  const vSpacing = 0.75 * h;
-  const xOffset = (y % 2) * (w / 2);
-
-  // Basic grid position for this hex
-  const rawX = x * w + xOffset;
-  const rawY = y * vSpacing;
-
-  // Compute total map dimensions
-  const mapWidth = totalCols * w;
-  const mapHeight = totalRows * vSpacing;
-
-  // Shift everything so the center is roughly at (0,0)
-  const centerOffsetX = mapWidth / 2 - w / 2;
-  const centerOffsetY = mapHeight / 2 - vSpacing / 2;
-
-  const finalX = rawX - centerOffsetX;
-  const finalY = rawY - centerOffsetY;
-
-  return [finalX, finalY];
+function getTerrainColor(terrain: TerrainType, elevation: number): string {
+  switch (terrain) {
+    case "deep_ocean":
+      return `rgb(0, 20, ${Math.floor(60 + elevation * 30)})`;
+    case "mid_ocean":
+      return `rgb(0, 40, ${Math.floor(110 + elevation * 40)})`;
+    case "shallow_ocean":
+      return `rgb(0, 80, ${Math.floor(180 + elevation * 40)})`;
+    case "coast":
+      return "#FAEDCA";
+    case "plains":
+      return "#90B77D";
+    case "hills":
+      return "#6B8E4E";
+    case "mountains":
+      return "#8B7355";
+    default:
+      return "gray";
+  }
 }
 
-function HexTile({
-  type,
-  x,
-  y,
-  adjacency,
-  totalCols,
-  totalRows,
-}: HexTileProps) {
-  const [px, py] = getHexPosition(x, y, totalCols, totalRows);
+function HexTile({ tile, size = 1, textures }: Readonly<HexTileProps>) {
+  const [px, pz] = axialToPoint(tile.q, tile.r, size);
 
-  // Keep base tile height consistent:
-  const tileHeight = 0.1;
+  // Base height for different terrain types
+  const baseHeight =
+    {
+      deep_ocean: 0.07,
+      mid_ocean: 0.1,
+      shallow_ocean: 0.13,
+      coast: 0.2,
+      plains: 0.3,
+      hills: 0.5,
+      mountains: 0.8,
+    }[tile.terrain] || 0.1;
 
-  // Use adjacency to vary surface features:
-  // For example, each adjacent land tile can raise the land slightly.
-  const surfaceVariation = type === "land" ? adjacency * 0.05 : 0;
-  const finalHeight = tileHeight + surfaceVariation;
+  // Add elevation variation
+  const height = baseHeight * (1 + tile.elevation * 0.5);
 
-  const color = type === "ocean" ? "blue" : "green";
+  const texture = textures[tile.terrain];
+  const color = getTerrainColor(tile.terrain, tile.elevation);
 
   return (
-    <mesh position={[px, finalHeight / 2, py]}>
-      <cylinderGeometry args={[0.5, 0.5, finalHeight, 6]} />
-      <meshStandardMaterial color={color} />
+    <mesh position={[px, height / 2, pz]}>
+      <cylinderGeometry args={[size, size, height, 6]} />
+      <meshStandardMaterial
+        transparent={true}
+        opacity={
+          tile.terrain === "shallow_ocean" || tile.terrain === "deep_ocean"
+            ? 0.5
+            : 1
+        }
+        side={DoubleSide}
+        map={texture}
+        color={color}
+      />
     </mesh>
   );
 }
 
-function getLandNeighborsCount(
-  map: TileType[][],
-  x: number,
-  y: number
-): number {
-  // For pointy-top hex, the six neighbor offsets could be:
-  const neighbors = [
-    [x + 1, y],
-    [x - 1, y],
-    [x, y - 1],
-    [x, y + 1],
-    [x + (y % 2 === 0 ? -1 : 1), y - 1],
-    [x + (y % 2 === 0 ? -1 : 1), y + 1],
-  ];
+function HexTiles({
+  tiles,
+  size,
+}: Readonly<{ tiles: HexTile[]; size: number }>) {
+  // Load all textures once
+  const texturesArr = useLoader(
+    TextureLoader,
+    Object.values(terrainTextures).map((file) => `/src/assets/textures/${file}`)
+  );
+  const textures: Record<TerrainType, any> = {
+    deep_ocean: texturesArr[0],
+    mid_ocean: texturesArr[1],
+    shallow_ocean: texturesArr[2],
+    coast: texturesArr[3],
+    plains: texturesArr[4],
+    hills: texturesArr[5],
+    mountains: texturesArr[6],
+  };
 
-  let count = 0;
-  for (const [nx, ny] of neighbors) {
-    if (
-      ny >= 0 &&
-      ny < map.length &&
-      nx >= 0 &&
-      nx < map[ny].length &&
-      map[ny][nx] === "land"
-    ) {
-      count++;
-    }
-  }
-  return count;
+  return (
+    <>
+      {tiles.map((tile) => (
+        <HexTile
+          key={`${tile.q}-${tile.r}`}
+          tile={tile}
+          size={size}
+          textures={textures}
+        />
+      ))}
+    </>
+  );
 }
 
 export function HexGridScene() {
-  const map = generateHexMap(25, 25);
-  const totalRows = map.length;
-  const totalCols = map[0].length;
-
-  // Precompute adjacency for land
-  const adjacencyMap = map.map((row, y) =>
-    row.map((tile, x) => {
-      if (tile === "land") {
-        return getLandNeighborsCount(map, x, y);
-      }
-      return 0;
-    })
-  );
+  const randomSeed = Math.random().toString(36).substring(2, 15);
+  // Generate a hex map with a random seed
+  const tiles = generateHexMap(12, randomSeed);
+  const hexSize = 1;
 
   return (
-    <Canvas camera={{ position: [5, 25, 25], fov: 30 }}>
+    <Canvas camera={{ position: [5, 30, 40], fov: 45 }}>
       <OrbitControls />
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[0, 100, 0]} intensity={0.5} />
-      {map.map((row, y) =>
-        row.map((tile, x) => (
-          <HexTile
-            key={`${x}-${y}`}
-            type={tile}
-            x={x}
-            y={y}
-            adjacency={adjacencyMap[y][x]}
-            totalCols={totalCols}
-            totalRows={totalRows}
-          />
-        ))
-      )}
+      <ambientLight intensity={1} />
+      <directionalLight position={[10, 10, 5]} intensity={2} />
+      <HexTiles tiles={tiles} size={hexSize} />
     </Canvas>
   );
 }
