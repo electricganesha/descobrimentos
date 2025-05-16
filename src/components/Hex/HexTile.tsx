@@ -12,6 +12,7 @@ interface HexTileProps {
   tile: HexTile;
   size?: number;
   textures: Record<TerrainType, any>;
+  onClick?: () => void;
 }
 
 export const HexTileComponent = ({
@@ -21,11 +22,13 @@ export const HexTileComponent = ({
   onHover,
   onUnhover,
   hovered = false,
+  onClick,
 }: Readonly<
   HexTileProps & {
     onHover?: (tile: HexTile) => void;
     onUnhover?: () => void;
     hovered?: boolean;
+    onClick?: () => void;
   }
 >) => {
   const [px, pz] = axialToPoint(tile.q, tile.r, size);
@@ -97,6 +100,7 @@ export const HexTileComponent = ({
             }
           : undefined
       }
+      onClick={onClick}
     >
       <cylinderGeometry args={[size, size, height, 6]} />
       {isOcean ? (
